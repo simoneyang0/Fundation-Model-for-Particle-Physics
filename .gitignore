@@ -1,0 +1,38 @@
+# Ambiente virtuale
+venv/
+.venv/
+env/
+.env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data files (escludi dati grandi)
+*.parquet
+*.root
+*.csv
+data/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

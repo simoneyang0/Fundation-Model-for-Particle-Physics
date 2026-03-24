@@ -1,0 +1,17 @@
+##########  lxplus  ##########
+
+#\kinit deyang@CERN.CH
+#ssh-keygen -b 4096 -t rsa 
+
+ssh deyang@lxplus.cern.ch
+
+cd /eos/user/d/deyang/ModelliFondazionali
+source myvenv/bin/activate
+
+jupyter-notebook --no-browser --port=8889
+
+ssh -N -f -L 8889:localhost:8889 deyang@lxplus.cern.ch
+
+deactivate
+
+fs lq ~
