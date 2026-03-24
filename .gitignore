@@ -16,7 +16,7 @@ build/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+#*.ipynb
 
 # IDE
 .vscode/
