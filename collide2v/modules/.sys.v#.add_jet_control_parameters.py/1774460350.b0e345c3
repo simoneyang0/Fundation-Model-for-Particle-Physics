@@ -129,7 +129,7 @@ def add_jet_control_parameters(ddf):
                 
                 # PT control: (jet / constituents) - 1
                 if sum_pt > 0:
-                    pt_control = (jet_pt[jet_idx] / sum_pt) - 1
+                    pt_control = (jet_pt[jet_idx] / pt_constituents) - 1
                 else:
                     pt_control = np.nan
                 

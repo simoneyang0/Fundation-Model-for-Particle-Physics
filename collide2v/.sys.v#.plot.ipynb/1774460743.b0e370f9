@@ -467,6 +467,130 @@
   },
   {
    "cell_type": "code",
+   "execution_count": 67,
+   "id": "47e2b86e",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[-1  1  1  1  2 -1 -2  0  2 -1  1 -1  1  2  1  1  1  0  0  1 -1  1 -1  1\n",
+      " -2]\n"
+     ]
+    }
+   ],
+   "source": [
+    "diffs = []\n",
+    "\n",
+    "for ev in range(5):\n",
+    "    \n",
+    "    jet_charge = ddf['FullReco_JetAK4_Charge'].loc[ev].compute()\n",
+    "    jet_constituents = ddf['FullReco_JetAK4_Constituents'].loc[ev].compute()\n",
+    "    cons_charge = ddf['FullReco_PFCand_Charge'].loc[ev].compute()\n",
+    "    cons_id = ddf['FullReco_PFCand_fUniqueID'].loc[ev].compute()\n",
+    "    \n",
+    "    for j in range(len(jet_constituents[ev])):\n",
+    "        charge = 0\n",
+    "        for i in jet_constituents[ev][j]:\n",
+    "            idx = np.where(cons_id[ev] == i)[0]\n",
+    "            charge += cons_charge[ev][idx]\n",
+    "            \n",
+    "        diffs.append(jet_charge[ev][j] - charge)\n",
+    "\n",
+    "diffs = np.hstack(diffs)\n",
+    "print(diffs)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 68,
+   "id": "c046f1bc-7754-4f2a-8ff1-d351aa3f5bbb",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[-1  1  1  1  2 -1 -2  0  2 -1  1 -1  1  2  1  1  1  0  0  1 -1  1 -1  1\n",
+      " -2 -1 -2 -3  1  1  1  2  0  1 -1  1 -2  4  4 -2  1  1  1 -2  0  1  1 -2\n",
+      " -1 -2  2  3 -3 -1 -1  3  0 -1  4  0  0  1  1  2  1  2  2  2  1 -1 -1  1\n",
+      " -1  0  2  0 -3  1  0 -2  0 -1 -1  1  0 -3 -3 -1  0 -1 -1 -1 -1 -1 -3  0\n",
+      "  1  0 -1  1  2  2  2  1  0  1  1  1 -1  2  2 -3 -1  2  1  1  1  2 -3  2\n",
+      "  2  1 -1  4 -1  1 -2  1  1  1 -2 -1  0  1 -2 -2  1 -1 -2 -2  2 -1  1  1\n",
+      " -1 -1  2 -2 -2  1  0 -2 -5 -2  1  1 -2 -1 -1 -1  0 -1  0 -1  0  1  1 -1\n",
+      "  3 -1  0  1 -1  1 -1 -1 -2  0  0  0  1 -1  0 -1  1 -1  0 -3 -2  2  1  0\n",
+      "  2 -3 -2  2 -2  2  1  1 -1  0 -1  1  0 -1  0 -1  1  1  0 -2  1  0 -1 -1\n",
+      "  1  1  0  1  2  1  2  1 -3 -1  2  0  0  2 -2  1 -2  2  0  0  0 -1  1  0\n",
+      "  1 -1  0  1 -2  0  1  2 -1  1  0 -1  0 -1  1 -2 -2  3  0  0  1  0  1 -1\n",
+      "  2  0 -3  0  0  1 -2  1  1 -1 -6  0  1  4 -2  1  1 -1 -1 -3  0  0  1 -1\n",
+      " -1  1 -2  1 -1 -2 -1  2  2  2  1 -1 -1  1 -1  0 -1  2  6 -2  1  2  1  1\n",
+      "  1  3 -1 -3  0 -1  1 -2 -1  0 -1  1  0  3  1  1  0 -2  2 -1  0  1 -1 -3\n",
+      "  1 -2  1 -2  1 -1  1  1 -1  0 -1  2  1  0  1  0 -1 -2 -1 -1 -1  2  0  0\n",
+      "  0  1  2  0  2 -1  0  2 -1  0  3  0  1  1 -2 -1  3 -3  2 -1 -1  2 -3  0\n",
+      "  2  1 -1 -2 -1  1  0 -1  1  0 -1 -1  0 -1  2 -3 -2  0 -1  0  0 -1 -1  0\n",
+      "  1 -1  0  1  0  1  2 -1 -2  1 -1 -1  0  1  0 -2  1 -1  2 -1 -1  2 -1  3\n",
+      "  0 -3  4 -1  0 -2  1 -1 -2 -1  1 -1  1 -1  2  1  1  0 -2 -2  2 -1  1 -1\n",
+      "  1  0  1  1 -1  0 -1  1 -1 -1  2  1 -2 -1 -1 -3 -1 -1  0 -1  0  2  0  0\n",
+      "  2 -1  0  1 -1  1 -1  0  0  1  1  1  0 -1 -2  0 -1 -1 -1  1  1  1 -2 -1\n",
+      " -2 -2  2  1  0  1 -1  1  0  1  0  2  0 -1 -1  1 -1 -1  1  1 -1 -1  1 -1\n",
+      "  1 -2 -1  2  2  1  0  0  1  1  2  0  1  0 -1  3  0 -1 -1 -2  0  0 -1  1\n",
+      " -2  0 -1  1 -1  1  2 -1 -1 -1  0  1  3  0 -3 -2  1 -1 -1  0 -1  1 -4  1\n",
+      " -2 -1  1 -3 -2  0  0  3 -1  1  2  0  1 -2  2 -3  1  2 -1]\n"
+     ]
+    }
+   ],
+   "source": [
+    "diffs = []\n",
+    "\n",
+    "for ev in range(100):\n",
+    "    \n",
+    "    # Usa .iloc[0] per estrarre l'array dalla Series\n",
+    "    jet_charge = ddf['FullReco_JetAK4_Charge'].loc[ev].compute().iloc[0]\n",
+    "    jet_constituents = ddf['FullReco_JetAK4_Constituents'].loc[ev].compute().iloc[0]\n",
+    "    cons_charge = ddf['FullReco_PFCand_Charge'].loc[ev].compute().iloc[0]\n",
+    "    cons_id = ddf['FullReco_PFCand_fUniqueID'].loc[ev].compute().iloc[0]\n",
+    "    \n",
+    "    # Ora jet_charge, jet_constituents, ecc. sono gli array diretti\n",
+    "    # Non serve più [ev] perché sono già gli array per quell'evento\n",
+    "    for j in range(len(jet_constituents)):\n",
+    "        charge = 0\n",
+    "        for i in jet_constituents[j]:\n",
+    "            idx = np.where(cons_id == i)[0]\n",
+    "            if len(idx) > 0:  # Controllo per sicurezza\n",
+    "                charge += cons_charge[idx[0]]\n",
+    "        \n",
+    "        diffs.append(jet_charge[j] - charge)\n",
+    "\n",
+    "# Converti in array numpy\n",
+    "diffs = np.array(diffs)\n",
+    "print(diffs)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "id": "edd8a683-37a5-472c-9108-c9bd63417f3f",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "2    1.834021\n",
+       "Name: pt_control, dtype: float64"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "ddf_control['pt_control'].loc[2].compute()"
+   ]
+  },
+  {
+   "cell_type": "code",
    "execution_count": null,
    "id": "094ede51-e3a7-424e-bd89-f1e073dc859a",
    "metadata": {},
