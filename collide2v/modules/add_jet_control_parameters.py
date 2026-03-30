@@ -12,6 +12,7 @@ Parametri:
 import dask.dataframe as dd
 import numpy as np
 import pandas as pd
+import vector
 
 
 def compute_invariant_mass(pt, eta, phi, mass):
@@ -28,7 +29,7 @@ def compute_invariant_mass(pt, eta, phi, mass):
     return np.sqrt(mass_sq)
 
 
-def add_jet_control_parameters(ddf):
+def add_jet_control_parameters(ddf, min_jet_pt = -1, no_22 = False, no_neg_jet_m = False): 
     """
     Aggiunge parametri di controllo appiattiti (una riga per jet).
     
@@ -55,24 +56,28 @@ def add_jet_control_parameters(ddf):
             pfcand_mass = row.get('FullReco_PFCand_Mass')
             pfcand_charge = row.get('FullReco_PFCand_Charge')
             pfcand_id = row.get('FullReco_PFCand_fUniqueID')
+            pfcand_type = row.get('FullReco_PFCand_PID')
             
             if (jet_pt is None or jet_constituents is None or 
                 pfcand_pt is None or pfcand_id is None):
                 continue
             
             for jet_idx in range(len(jet_pt)):
-                if jet_idx >= len(jet_constituents):
+                if no_neg_jet_m and jet_mass[jet_idx] < 0:
                     continue
+                
+                if jet_pt[jet_idx] < min_jet_pt: 
+                    continue
+                
+                if jet_idx >= len(jet_constituents):
+                    raise RuntimeError("Errore index")
                 
                 constituents_idx = jet_constituents[jet_idx]
                 if constituents_idx is None or len(constituents_idx) == 0:
-                    continue
+                    raise RuntimeError("Errore constituents")
                 
                 # 1. Massa invariante del jet
-                jet_inv_mass = compute_invariant_mass(
-                    jet_pt[jet_idx], jet_eta[jet_idx], 
-                    jet_phi[jet_idx], jet_mass[jet_idx]
-                )
+                jet_inv_mass = jet_mass[jet_idx]
                 
                 # 2. Proprietà aggregate dei costituenti
                 sum_charge = 0.0
@@ -80,13 +85,19 @@ def add_jet_control_parameters(ddf):
                 total_py = 0.0
                 total_pz = 0.0
                 total_e = 0.0
+                n_constituents = 0 
                 
                 # Cerca ogni costituente usando il suo ID
                 for constituent_id in constituents_idx:
                     pos = np.where(pfcand_id == constituent_id)[0]
                     
-                    if len(pos) > 0:
+                    if len(pos) >= 0:
                         idx = pos[0]
+                        
+                        #scarto particelle di tipo 22
+                        if no_22 and pfcand_type[idx] == 22:
+                            continue
+                        n_constituents += 1
                         
                         # Carica (scalare)
                         charge_val = pfcand_charge[idx]
@@ -118,6 +129,13 @@ def add_jet_control_parameters(ddf):
                 if inv_mass_sq < 0:
                     inv_mass_sq = 0
                 sum_inv_mass = np.sqrt(inv_mass_sq)
+
+                # DeltaR
+                j_4mom = vector.obj(pt=jet_pt[jet_idx],
+                           eta=jet_eta[jet_idx],
+                           phi=jet_phi[jet_idx],
+                           m=jet_mass[jet_idx])
+                const_4mom = vector.obj(px = total_px, py = total_py, pz = total_pz, E = total_e)
                 
                 # Carica del jet
                 jet_charge_val = jet_charge[jet_idx]
@@ -129,28 +147,31 @@ def add_jet_control_parameters(ddf):
                 
                 # PT control: (jet / constituents) - 1
                 if sum_pt > 0:
-                    pt_control = (jet_pt[jet_idx] / sum_pt) - 1
+                    pt_control = (sum_pt / jet_pt[jet_idx]) - 1
                 else:
                     pt_control = np.nan
                 
                 # Mass control: (jet / constituents) - 1
                 if sum_inv_mass > 0:
-                    mass_control = (jet_inv_mass / sum_inv_mass) - 1
+                    mass_control = (sum_inv_mass / jet_inv_mass) - 1
                 else:
                     mass_control = np.nan
                 
                 all_rows.append({
                     'charge_control': charge_control,
                     'pt_control': pt_control,
-                    'mass_control': mass_control
+                    'mass_control': mass_control,
+                    'n_constituents': n_constituents,
+                    'distance': const_4mom.deltaR(j_4mom)
                 })
-        
         return pd.DataFrame(all_rows)
     
     result = ddf.map_partitions(compute_and_flatten_partition, meta={
         'charge_control': 'float64',
         'pt_control': 'float64',
-        'mass_control': 'float64'
+        'mass_control': 'float64',
+        'n_constituents': 'float64',
+        'distance': 'float64'
     })
     
     return result

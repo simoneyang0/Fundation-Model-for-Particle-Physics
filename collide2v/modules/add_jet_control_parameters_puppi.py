@@ -5,13 +5,14 @@ con le proprietà aggregate dei loro costituenti.
 
 Parametri:
 - charge_control: Q_jet - Q_costituenti (differenza diretta)
-- pt_control: (PT_jet - PT_costituenti_vettoriale) / <PT_jet>
-- mass_control: (M_jet - M_costituenti) / <M_jet>
+- pt_control: (PT_jet / PT_costituenti_vettoriale) - 1
+- mass_control: (M_jet / M_costituenti) - 1
 """
 
 import dask.dataframe as dd
 import numpy as np
 import pandas as pd
+import vector
 
 
 def compute_invariant_mass(pt, eta, phi, mass):
@@ -28,81 +29,76 @@ def compute_invariant_mass(pt, eta, phi, mass):
     return np.sqrt(mass_sq)
 
 
-def add_jet_control_parameters(ddf):
+def add_jet_control_parameters_puppi(ddf, min_jet_pt = -1, no_22 = False, no_neg_jet_m = False): 
     """
     Aggiunge parametri di controllo appiattiti (una riga per jet).
+    
+    Parametri:
+    - charge_control: Q_jet - Q_costituenti
+    - pt_control: (PT_jet / PT_costituenti_vettoriale) - 1
+    - mass_control: (M_jet / M_costituenti) - 1
     """
     
     def compute_and_flatten_partition(partition):
         all_rows = []
         
-        # Prima passata: calcola medie per normalizzazione
-        jet_pt_list = []
-        jet_mass_list = []
-        
         for _, row in partition.iterrows():
-            jet_pt = row.get('FullReco_JetAK4_PT')
-            jet_eta = row.get('FullReco_JetAK4_Eta')
-            jet_phi = row.get('FullReco_JetAK4_Phi')
-            jet_mass = row.get('FullReco_JetAK4_Mass')
+            jet_pt = row.get('FullReco_JetPuppiAK4_PT')
+            jet_eta = row.get('FullReco_JetPuppiAK4_Eta')
+            jet_phi = row.get('FullReco_JetPuppiAK4_Phi')
+            jet_mass = row.get('FullReco_JetPuppiAK4_Mass')
+            jet_charge = row.get('FullReco_JetPuppiAK4_Charge')
+            jet_constituents = row.get('FullReco_JetPuppiAK4_Constituents')
             
-            if jet_pt is not None:
-                for j in range(len(jet_pt)):
-                    inv_mass = compute_invariant_mass(
-                        jet_pt[j], jet_eta[j], jet_phi[j], jet_mass[j]
-                    )
-                    jet_mass_list.append(inv_mass)
-                    jet_pt_list.append(jet_pt[j])
-        
-        mean_jet_pt = np.mean(jet_pt_list) if jet_pt_list else 1.0
-        mean_jet_mass = 91 #np.mean(jet_mass_list) if jet_mass_list else 1.0
-        
-        # Seconda passata: calcola parametri di controllo
-        for _, row in partition.iterrows():
-            jet_pt = row.get('FullReco_JetAK4_PT')
-            jet_eta = row.get('FullReco_JetAK4_Eta')
-            jet_phi = row.get('FullReco_JetAK4_Phi')
-            jet_mass = row.get('FullReco_JetAK4_Mass')
-            jet_charge = row.get('FullReco_JetAK4_Charge')
-            jet_constituents = row.get('FullReco_JetAK4_Constituents')
+            pfcand_pt = row.get('FullReco_PUPPIPart_PT')
+            pfcand_eta = row.get('FullReco_PUPPIPart_Eta')
+            pfcand_phi = row.get('FullReco_PUPPIPart_Phi')
+            pfcand_mass = row.get('FullReco_PUPPIPart_Mass')
+            pfcand_charge = row.get('FullReco_PUPPIPart_Charge')
+            pfcand_id = row.get('FullReco_PUPPIPart_fUniqueID')
+            pfcand_type = row.get('FullReco_PUPPIPart_PID')
             
-            pfcand_pt = row.get('FullReco_PFCand_PT')
-            pfcand_eta = row.get('FullReco_PFCand_Eta')
-            pfcand_phi = row.get('FullReco_PFCand_Phi')
-            pfcand_mass = row.get('FullReco_PFCand_Mass')
-            pfcand_charge = row.get('FullReco_PFCand_Charge')
-            
-            if (jet_pt is None or jet_constituents is None or pfcand_pt is None):
+            if (jet_pt is None or jet_constituents is None or 
+                pfcand_pt is None or pfcand_id is None):
                 continue
             
             for jet_idx in range(len(jet_pt)):
-                if jet_idx >= len(jet_constituents):
+                if no_neg_jet_m and jet_mass[jet_idx] < 0:
                     continue
+                
+                if jet_pt[jet_idx] < min_jet_pt: 
+                    continue
+                
+                if jet_idx >= len(jet_constituents):
+                    raise RuntimeError("Errore index")
                 
                 constituents_idx = jet_constituents[jet_idx]
                 if constituents_idx is None or len(constituents_idx) == 0:
-                    continue
+                    raise RuntimeError("Errore constituents")
                 
                 # 1. Massa invariante del jet
-                jet_inv_mass = compute_invariant_mass(
-                    jet_pt[jet_idx], jet_eta[jet_idx], 
-                    jet_phi[jet_idx], jet_mass[jet_idx]
-                )
+                jet_inv_mass = jet_mass[jet_idx]
                 
                 # 2. Proprietà aggregate dei costituenti
-                # Per carica: somma scalare
                 sum_charge = 0.0
-                
-                # Per PT: somma vettoriale (non scalare!)
                 total_px = 0.0
                 total_py = 0.0
-                
-                # Per massa invariante: somma 4-vettori
                 total_pz = 0.0
                 total_e = 0.0
+                n_constituents = 0 
                 
-                for idx in constituents_idx:
-                    if idx < len(pfcand_pt):
+                # Cerca ogni costituente usando il suo ID
+                for constituent_id in constituents_idx:
+                    pos = np.where(pfcand_id == constituent_id)[0]
+                    
+                    if len(pos) >= 0:
+                        idx = pos[0]
+                        
+                        #scarto particelle di tipo 22
+                        if no_22 and pfcand_type[idx] == 22:
+                            continue
+                        n_constituents += 1
+                        
                         # Carica (scalare)
                         charge_val = pfcand_charge[idx]
                         if isinstance(charge_val, (list, np.ndarray)):
@@ -133,6 +129,13 @@ def add_jet_control_parameters(ddf):
                 if inv_mass_sq < 0:
                     inv_mass_sq = 0
                 sum_inv_mass = np.sqrt(inv_mass_sq)
+
+                # DeltaR
+                j_4mom = vector.obj(pt=jet_pt[jet_idx],
+                           eta=jet_eta[jet_idx],
+                           phi=jet_phi[jet_idx],
+                           m=jet_mass[jet_idx])
+                const_4mom = vector.obj(px = total_px, py = total_py, pz = total_pz, E = total_e)
                 
                 # Carica del jet
                 jet_charge_val = jet_charge[jet_idx]
@@ -141,21 +144,34 @@ def add_jet_control_parameters(ddf):
                 
                 # Parametri di controllo
                 charge_control = jet_charge_val - sum_charge
-                pt_control = (jet_pt[jet_idx] - sum_pt) / mean_jet_pt if mean_jet_pt > 0 else np.nan
-                mass_control = (jet_inv_mass - sum_inv_mass) / mean_jet_mass if mean_jet_mass > 0 else np.nan
+                
+                # PT control: (jet / constituents) - 1
+                if sum_pt > 0:
+                    pt_control = (sum_pt / jet_pt[jet_idx]) - 1
+                else:
+                    pt_control = np.nan
+                
+                # Mass control: (jet / constituents) - 1
+                if sum_inv_mass > 0:
+                    mass_control = (sum_inv_mass / jet_inv_mass) - 1
+                else:
+                    mass_control = np.nan
                 
                 all_rows.append({
                     'charge_control': charge_control,
                     'pt_control': pt_control,
-                    'mass_control': mass_control
+                    'mass_control': mass_control,
+                    'n_constituents': n_constituents,
+                    'distance': const_4mom.deltaR(j_4mom)
                 })
-        
         return pd.DataFrame(all_rows)
     
     result = ddf.map_partitions(compute_and_flatten_partition, meta={
         'charge_control': 'float64',
         'pt_control': 'float64',
-        'mass_control': 'float64'
+        'mass_control': 'float64',
+        'n_constituents': 'float64',
+        'distance': 'float64'
     })
     
     return result
@@ -179,7 +195,8 @@ if __name__ == "__main__":
         "FullReco_PFCand_Eta",
         "FullReco_PFCand_Phi",
         "FullReco_PFCand_Mass",
-        "FullReco_PFCand_Charge"
+        "FullReco_PFCand_Charge",
+        "FullReco_PFCand_fUniqueID"
     ])
     
     print("Dataset caricato")
@@ -204,6 +221,7 @@ if __name__ == "__main__":
     # Istogrammi
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
+    # Charge control (differenza)
     axes[0].hist(charge_control, bins=50, edgecolor='black', alpha=0.7)
     axes[0].set_xlabel('Q_jet - Q_costituenti')
     axes[0].set_ylabel('Count')
@@ -211,15 +229,17 @@ if __name__ == "__main__":
     axes[0].axvline(0, color='red', linestyle='--')
     axes[0].grid(True, alpha=0.3)
     
+    # PT control (rapporto -1)
     axes[1].hist(pt_control, bins=50, edgecolor='black', alpha=0.7)
-    axes[1].set_xlabel('(PT_jet - PT_costituenti_vettoriale) / <PT_jet>')
+    axes[1].set_xlabel('(PT_jet / PT_costituenti) - 1')
     axes[1].set_ylabel('Count')
     axes[1].set_title('Controllo PT')
     axes[1].axvline(0, color='red', linestyle='--')
     axes[1].grid(True, alpha=0.3)
     
+    # Mass control (rapporto -1)
     axes[2].hist(mass_control, bins=50, edgecolor='black', alpha=0.7)
-    axes[2].set_xlabel('(M_jet - M_costituenti) / <M_jet>')
+    axes[2].set_xlabel('(M_jet / M_costituenti) - 1')
     axes[2].set_ylabel('Count')
     axes[2].set_title('Controllo Massa')
     axes[2].axvline(0, color='red', linestyle='--')
@@ -233,3 +253,9 @@ if __name__ == "__main__":
     print(f"  Charge control: mean={charge_control.mean():.6f}, std={charge_control.std():.6f}")
     print(f"  PT control: mean={pt_control.mean():.6f}, std={pt_control.std():.6f}")
     print(f"  Mass control: mean={mass_control.mean():.6f}, std={mass_control.std():.6f}")
+    
+    # Interpretazione
+    print("\nINTERPRETAZIONE:")
+    print("  Se pt_control = 0 -> PT_jet = PT_costituenti")
+    print("  Se pt_control > 0 -> PT_jet > PT_costituenti (jet ha più PT della somma vettoriale)")
+    print("  Se pt_control < 0 -> PT_jet < PT_costituenti (anomalo, potrebbe indicare problemi)")

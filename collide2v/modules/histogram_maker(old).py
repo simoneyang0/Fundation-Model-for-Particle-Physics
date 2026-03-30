@@ -264,12 +264,10 @@ class SafeHistogramMaker:
     
     def make_histogram(self, column: str, bins: int = 100,
                        range: Optional[Tuple[float, float]] = None,
-                       figsize: Tuple[int, int] = (6, 4),
+                       figsize: Tuple[int, int] = (10, 6),
                        show_stats: bool = True,
                        save_path: Optional[str] = None,
-                       title: Optional[str] = None,
-                       log_scale: bool = False,
-                       log_x: bool = False) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+                       title: Optional[str] = None) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """
         Crea un istogramma per una colonna.
         
@@ -325,25 +323,11 @@ class SafeHistogramMaker:
                 hist, bin_edges, _ = ax.hist(data, bins=bins, range=range,
                                             edgecolor='black', alpha=0.7,
                                             color='steelblue')
-                
             except Exception as e:
                 print(f"Errore nel plot di {column}: {e}")
                 # Tentativo con bins ridotti
                 hist, bin_edges, _ = ax.hist(data, bins=min(bins, 50), range=range,
                                             edgecolor='black', alpha=0.7)
-
-            # Scala logaritmica asse Y (conteggi)
-            if log_scale:
-                ax.set_yscale('log')
-            
-            # Scala logaritmica asse X (valori)
-            if log_x:
-                # Evita problemi con valori <= 0
-                data = data[data > 0]
-                if len(data) == 0:
-                    print(f"Attenzione: nessun valore positivo per scala log X in {column}")
-                else:
-                    ax.set_xscale('log')
             
             # Imposta etichette
             ax.set_xlabel(column)
@@ -384,60 +368,10 @@ class SafeHistogramMaker:
             
             return hist, bin_edges
     
-    def make_histograms_for_columns(self, columns: List[str], bins: int = 50,
-                                    range_dict: Optional[Dict[str, Tuple[float, float]]] = None,
-                                    figsize: Tuple[int, int] = (6, 4),
-                                    output_dir: Optional[str] = None,
-                                    show: bool = True,
-                                    log_scale: bool = False,
-                                    log_x: bool = False):
-        """
-        Crea istogrammi per le colonne specificate.
-        
-        Parameters:
-        -----------
-        columns : List[str]
-            Lista delle colonne per cui creare istogrammi
-        bins : int
-            Numero di bin
-        range_dict : dict, optional
-            Dizionario con range personalizzati per colonna
-        figsize : tuple
-            Dimensione della figura
-        output_dir : str, optional
-            Directory per salvare le immagini
-        show : bool
-            Se True, mostra i plot
-        """
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-        
-        for col in columns:
-            if col not in self.ddf.columns:
-                print(f"Attenzione: colonna '{col}' non trovata nel DataFrame")
-                continue
-            
-            col_range = range_dict.get(col) if range_dict else None
-            save_path = None
-            if output_dir:
-                safe_name = col.replace('/', '_').replace(' ', '_')
-                save_path = os.path.join(output_dir, f"{safe_name}.png")
-            
-            self.make_histogram(
-                col, bins=bins, range=col_range,
-                figsize=figsize, show_stats=True,
-                save_path=save_path if not show else None,
-                log_scale=log_scale,
-                log_x=log_x
-            )
-    
     def make_all_histograms(self, bins: int = 50,
                            range_dict: Optional[Dict[str, Tuple[float, float]]] = None,
-                           figsize: Tuple[int, int] = (6, 4),
-                           output_dir: Optional[str] = None,
-                           show: bool = True,
-                           log_scale: bool = False,
-                           log_x: bool = False):
+                           figsize: Tuple[int, int] = (10, 6),
+                           output_dir: Optional[str] = None):
         """
         Crea istogrammi per tutte le colonne.
         
@@ -451,8 +385,6 @@ class SafeHistogramMaker:
             Dimensione della figura
         output_dir : str, optional
             Directory per salvare le immagini
-        show : bool
-            Se True, mostra i plot
         """
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
@@ -464,41 +396,18 @@ class SafeHistogramMaker:
                 safe_name = col.replace('/', '_').replace(' ', '_')
                 save_path = os.path.join(output_dir, f"{safe_name}.png")
             
-            self.make_histogram(
-                col, bins=bins, range=col_range,
-                figsize=figsize, show_stats=True,
-                save_path=save_path if not show else None,
-                log_scale=log_scale,
-                log_x=log_x
-            )
+            self.make_histogram(col, bins=bins, range=col_range,
+                              figsize=figsize, save_path=save_path)
     
-    def print_summary_for_columns(self, columns: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        Stampa un riassunto delle statistiche per le colonne specificate.
-        
-        Parameters:
-        -----------
-        columns : list, optional
-            Lista di colonne da analizzare (None = tutte)
-        
-        Returns:
-        --------
-        pd.DataFrame : DataFrame con le statistiche
-        """
-        if columns is None:
-            columns = self.ddf.columns.tolist()
-        
+    def print_summary(self):
+        """Stampa un riassunto delle statistiche per tutte le colonne."""
         print("\n" + "="*80)
         print("RIASSUNTO STATISTICHE")
         print("="*80)
         
         summary_data = []
         
-        for col in columns:
-            if col not in self.ddf.columns:
-                print(f"\n{col}: colonna non trovata")
-                continue
-                
+        for col in self.ddf.columns:
             stats = self.get_statistics(col)
             
             if 'error' in stats:
@@ -529,36 +438,20 @@ class SafeHistogramMaker:
         
         return pd.DataFrame(summary_data)
     
-    def print_summary(self):
+    def save_statistics(self, output_file: str):
         """
-        Stampa un riassunto delle statistiche per tutte le colonne.
-        (Mantenuto per retrocompatibilità)
-        """
-        return self.print_summary_for_columns()
-    
-    def save_statistics_for_columns(self, output_file: str, columns: Optional[List[str]] = None):
-        """
-        Salva le statistiche per le colonne specificate in un file CSV.
+        Salva le statistiche in un file CSV.
         
         Parameters:
         -----------
         output_file : str
             Percorso del file di output
-        columns : list, optional
-            Lista di colonne da analizzare (None = tutte)
         """
-        df_stats = self.print_summary_for_columns(columns)
+        df_stats = self.print_summary()
         if df_stats is not None and len(df_stats) > 0:
             df_stats.to_csv(output_file, index=False)
             if self.verbose:
                 print(f"\nStatistiche salvate in: {output_file}")
-    
-    def save_statistics(self, output_file: str):
-        """
-        Salva le statistiche in un file CSV per tutte le colonne.
-        (Mantenuto per retrocompatibilità)
-        """
-        self.save_statistics_for_columns(output_file)
 
 
 def create_histogram_maker_from_file(file_path: str, 
@@ -631,25 +524,14 @@ def main():
     print("CREAZIONE ISTOGRAMMI")
     print("="*80)
     
-    # Se sono specificate colonne, usa make_histograms_for_columns
-    if args.columns:
-        maker.make_histograms_for_columns(
-            columns=args.columns,
-            bins=args.bins,
-            output_dir=args.output_dir if not args.no_show else args.output_dir,
-            figsize=(10, 6),
-            show=not args.no_show
-        )
-    else:
-        maker.make_all_histograms(
-            bins=args.bins,
-            output_dir=args.output_dir if not args.no_show else args.output_dir,
-            figsize=(10, 6),
-            show=not args.no_show
-        )
+    maker.make_all_histograms(
+        bins=args.bins,
+        output_dir=args.output_dir if not args.no_show else args.output_dir,
+        figsize=(10, 6)
+    )
     
-    # Salva statistiche (solo per le colonne richieste)
-    maker.save_statistics_for_columns(args.stats_file, columns=args.columns)
+    # Salva statistiche
+    maker.save_statistics(args.stats_file)
     
     print("\n" + "="*80)
     print(f"Completato! Istogrammi salvati in: {args.output_dir}")
